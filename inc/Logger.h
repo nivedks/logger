@@ -7,7 +7,7 @@
 #include <queue>
 #include <thread>
 
-#define ENABLE_FILE_LOGGING
+#define FILE_LOGGING true
 #define MAX_NUMBER_FILES 5
 #define MAX_FILE_SIZE_IN_BYTES 2000
 #define LOG_FILE_PREFIX "Log"
@@ -35,7 +35,8 @@ enum class LogLevel
 // on a LOG call, a separate worker thread is responsible for flushing 
 // the buffer queue to stdout or to a file depending on the configuration chosen. 
 // Using the same philosophy of do no harm, the logger does not generate any error 
-// messages and every logging attempt is best effort.
+// messages and every logging attempt is best effort. Any errors generated are posted
+// to cerr. 
 class Logger
 {
 public:
@@ -102,6 +103,9 @@ private:
     // Lock controls synchronization across threads
     // for log buffer access.
     std::mutex m_logBufferLock;
+
+    // Controls the logging mode of the logger class.
+    bool m_fileLoggingEnabled = FILE_LOGGING; 
 };
 
 #define LOG(loglevel, msg) \

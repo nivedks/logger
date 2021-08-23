@@ -82,7 +82,7 @@ void Logger::LogFile(std::string& msg)
 
     logFile.close();
 
-    // If current file size is greater the max allowed size of the file
+    // If current file size is greater than max allowed size of the file
     // move the next log file or go back to 0.
     if (GetFileSize(logFileName) > MAX_FILE_SIZE_IN_BYTES)
     {
@@ -104,11 +104,14 @@ void Logger::Flush()
         auto msg = m_logBuffer.front();
         m_logBuffer.pop();
 
-        #ifdef ENABLE_FILE_LOGGING
-        LogFile(msg);
-        #else
-        LogStdout(msg);
-        #endif
+        if (m_fileLoggingEnabled)
+        {
+            LogFile(msg);
+        }
+        else
+        {
+            LogStdout(msg);
+        }
     }
 }
 
