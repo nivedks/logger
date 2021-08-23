@@ -5,6 +5,12 @@
 #include <unordered_map>
 #include <mutex>
 #include <queue>
+#include <thread>
+
+#define ENABLE_FILE_LOGGING
+#define MAX_NUMBER_FILES 5
+#define MAX_FILE_SIZE_IN_BYTES 2000
+#define LOGGER_INTERNAL_BUFFER_SIZE 100
 
 enum class LogLevel
 {
@@ -12,12 +18,6 @@ enum class LogLevel
     DEBUG,
     WARN,
     ERROR,
-};
-
-enum class Target
-{
-    STDOUT,
-    FILE,
 };
 
 class Logger
@@ -33,6 +33,7 @@ public:
     void Log(std::string& msg);
 
     void LogFile(std::string& msg);
+    void LogStdout(std::string& msg);
 
     void Log(LogLevel level, std::string& msg);
 
@@ -41,8 +42,16 @@ public:
     Logger& operator=(const Logger&) = delete;
     Logger& operator=(Logger&&) = delete;
 
+    ~Logger()
+    {
+        stopflushBufferThread = true;
+        flushBufferThread.join();
+    }
+
 private:
-    Logger(){}
+    Logger(){
+        flushBufferThread = std::thread(&Logger::FlushBufferWorker, this);
+    }
 
     std::unordered_map<LogLevel, std::string> levelToString
     {
@@ -51,6 +60,17 @@ private:
         std::pair<LogLevel, std::string>(LogLevel::WARN, "WARN"),
         std::pair<LogLevel, std::string>(LogLevel::ERROR, "ERROR"),
     };
+
+    void Flush();
+
+    std::thread flushBufferThread;
+    std::atomic<bool> stopflushBufferThread{false};
+
+    void FlushBufferWorker();
+
+    std::queue<std::string> logBuffer;
+
+    bool IsLogBufferEmpty();
 
     std::mutex logLock;
 

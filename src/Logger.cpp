@@ -6,10 +6,8 @@
 #include <ostream>
 #include <fstream>
 #include <istream>
-
-#if 0
-std::shared_ptr<Logger> Logger::m_log;
-#endif
+#include <chrono>
+#include <thread>
 
 static int GetFileSize(const std::string& fileName)
 {
@@ -33,61 +31,89 @@ static std::string GetCurrentTime()
     return ss.str();
 }
 
-#if 0
-std::shared_ptr<Logger> Logger::Instance()
-{
-    if (!m_log)
-    {
-        m_log = std::shared_ptr<Logger>(new Logger());
-    }
-    
-    return m_log;
-};
-#endif
-
 void Logger::Log(std::string& msg)
 {
     std::lock_guard<std::mutex> lock(logLock);
-    std::cout << msg.c_str();
+
+    // Wait for flush to happen before adding more to the log
+    // Using a drop strategy so the logs are still usable
+    if (logBuffer.size() > LOGGER_INTERNAL_BUFFER_SIZE)
+    {
+        std::cerr<< "Dropping message!! " << msg;
+        return; 
+    }
+
+    logBuffer.push(msg);
 }
 
 void Logger::Log(LogLevel level, std::string& msg)
 {
     std::string logMesg = GetCurrentTime() + ":" + levelToString[level] + "<<" + msg + "\n";
-    //Log(logMesg);
-    LogFile(logMesg);
+    Log(logMesg);
+}
+
+void Logger::LogStdout(std::string& msg)
+{
+    std::cout << msg.c_str();
 }
 
 void Logger::LogFile(std::string& msg)
 {
     static int curFileId = 0;
-    const int maxFiles = 5;
-    const int maxFileSizeInBytes = 2000;
+    const int maxFiles = MAX_NUMBER_FILES;
+    const int maxFileSizeInBytes = MAX_FILE_SIZE_IN_BYTES;
     const std::string logFilePrefix = "Log";
     const std::string logFileName = logFilePrefix + "_" + std::to_string(curFileId); 
 
+    std::ofstream logFile;
+    if (GetFileSize(logFileName) > maxFileSizeInBytes)
     {
-        std::lock_guard<std::mutex> lock(logLock);
+        logFile.open(logFileName.c_str(), std::ofstream::trunc);   
+    }
+    else
+    {
+        logFile.open(logFileName.c_str(), std::ofstream::app);
+    }
 
-        std::ofstream logFile;
-        if (GetFileSize(logFileName) > maxFileSizeInBytes)
-        {
-            logFile.open(logFileName.c_str(), std::ofstream::trunc);   
-        }
-        else
-        {
-            logFile.open(logFileName.c_str(), std::ofstream::app);
-        }
+    logFile << msg << std::flush;
 
-        logFile << msg << std::flush;
+    logFile.close();
 
-        logFile.close();
+    // If current file size is greater the max allowed size of the file
+    // move the next log file or go back to 0.
+    if (GetFileSize(logFileName) > maxFileSizeInBytes)
+    {
+        curFileId = (curFileId + 1) % maxFiles;
+    }
+}
 
-        // If current file size is greater the max allowed size of the file
-        // move the next log file or go back to 0.
-        if (GetFileSize(logFileName) > maxFileSizeInBytes)
-        {
-            curFileId = (curFileId + 1) % maxFiles;
-        }
+bool Logger::IsLogBufferEmpty()
+{
+    std::lock_guard<std::mutex> lock(logLock);
+    return logBuffer.empty();
+}
+
+void Logger::Flush()
+{
+    std::lock_guard<std::mutex> lock(logLock);
+    while (!logBuffer.empty())
+    {
+        auto msg = logBuffer.front();
+        logBuffer.pop();
+
+        #ifdef ENABLE_FILE_LOGGING
+        LogFile(msg);
+        #else
+        LogStdout(msg);
+        #endif
+    }
+}
+
+void Logger::FlushBufferWorker()
+{
+    while (!IsLogBufferEmpty() || !stopflushBufferThread)
+    {
+        Flush();
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
     }
 }

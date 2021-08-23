@@ -18,7 +18,7 @@ int main()
             {
                 std::this_thread::sleep_for(std::chrono::milliseconds(rand() % 300));
 
-                std::string mesg1 = "Thread " + std::to_string(i) + "Message " + std::to_string(j);
+                std::string mesg1 = "Thread " + std::to_string(i) + " Message " + std::to_string(j);
                 LOG(LogLevel::INFO, mesg1);
             }
 
